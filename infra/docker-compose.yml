@@ -1,0 +1,61 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: tv1-pg
+    restart: unless-stopped
+    environment:
+      # Postgres superuser — 운영/마이그레이션 전용, 앱에선 사용 금지
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in infra/.env}
+      # docker-entrypoint가 postgres 유저로 'trading' DB를 자동 생성
+      POSTGRES_DB: trading
+      # init-roles.sh에서 trading_app 유저 생성에 사용
+      TRADING_APP_PASSWORD: ${TRADING_APP_PASSWORD:?TRADING_APP_PASSWORD is required in infra/.env}
+      # VM1 12GB RAM을 SaaS 워크로드와 나눠 써야 하므로 Timescale 튜닝 보수적으로
+      TS_TUNE_MEMORY: 3GB
+      TS_TUNE_NUM_CPUS: "2"
+    volumes:
+      - tsdb-data:/var/lib/postgresql/data
+      # 초기화 스크립트는 파일명 순서대로 실행됨 (05 → 10)
+      - ./init-roles.sh:/docker-entrypoint-initdb.d/05-init-roles.sh:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    ports:
+      # 기본 127.0.0.1 (로컬 전용). Tailscale로 원격 접속하려면
+      # .env의 DB_BIND_HOST를 VM1 Tailscale IP(100.x.x.x)로 설정
+      - "${DB_BIND_HOST:-127.0.0.1}:5432:5432"
+    # VM1 공유 자원 보호: 최대 4GB까지만 사용
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trading"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: tv1-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required in infra/.env}
+    volumes:
+      - redis-data:/data
+    # sh -c로 감싸서 $$REDIS_PASSWORD가 shell에서 평가되도록
+    command: >
+      sh -c 'exec redis-server
+      --save 60 1
+      --appendonly yes
+      --requirepass "$$REDIS_PASSWORD"
+      --maxmemory 768mb
+      --maxmemory-policy allkeys-lru'
+    ports:
+      - "${REDIS_BIND_HOST:-127.0.0.1}:6379:6379"
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  tsdb-data:
+  redis-data:

@@ -1,0 +1,38 @@
+{
+  "name": "tradingview-1",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "universe:load": "tsx --env-file=.env.local scripts/universe-load.ts",
+    "universe:load:kospi200": "tsx --env-file=.env.local scripts/universe-load.ts --file data/seed/kospi200.json --tier B --source kospi200",
+    "universe:load:kosdaq150": "tsx --env-file=.env.local scripts/universe-load.ts --file data/seed/kosdaq150.json --tier B --source kosdaq150",
+    "universe:fetch:kospi200": "tsx --env-file=.env.local scripts/fetch-kospi200-kis.ts --alias kodex200",
+    "universe:fetch:kosdaq150": "tsx --env-file=.env.local scripts/fetch-kospi200-kis.ts --alias kodex_kq150",
+    "universe:tier": "tsx --env-file=.env.local scripts/universe-tier.ts",
+    "hook:test": "tsx --env-file=.env.local scripts/hook-test.ts",
+    "trades:poll": "tsx --env-file=.env.local scripts/trades-poll.ts"
+  },
+  "dependencies": {
+    "lightweight-charts": "^5.0.7",
+    "next": "^15.2.4",
+    "postgres": "^3.4.9",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "dotenv": "^17.4.2",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.3"
+  }
+}
