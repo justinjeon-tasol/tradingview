@@ -38,6 +38,11 @@ type ChartProps = {
 const PREPEND_THRESHOLD_BARS = 15;
 const MAX_PREPEND_ATTEMPTS = 7;
 
+// lightweight-charts v5는 타임존 네이티브 지원이 없어 UTC 기준으로 라벨을 찍는다.
+// 국내 지수는 09:00 KST(=00:00 UTC) 개장이라 그대로 넘기면 "00:00"으로 보임.
+// 차트 내부 표현을 전부 KST-shifted(+9h)로 유지하고, API boundary에서만 역 shift.
+const KST_OFFSET_SEC = 9 * 60 * 60;
+
 export default function Chart({
   symbol = "005930",
   interval = "5m",
@@ -73,14 +78,15 @@ export default function Chart({
   async function fetchBars(params: {
     symbol: string;
     interval: string;
-    before?: number;
+    before?: number; // KST-shifted (차트 내부 표현)
     signal?: AbortSignal;
   }): Promise<ApiResponse | { error: string }> {
     const u = new URL("/api/candles", window.location.origin);
     u.searchParams.set("symbol", params.symbol);
     u.searchParams.set("interval", params.interval);
     if (params.before !== undefined) {
-      u.searchParams.set("before", String(params.before));
+      // API는 UTC unix seconds 기준
+      u.searchParams.set("before", String(params.before - KST_OFFSET_SEC));
     }
     const res = await fetch(u.toString(), {
       signal: params.signal,
@@ -88,7 +94,18 @@ export default function Chart({
     });
     const body = await res.json();
     if (!res.ok || "error" in body) return body;
-    return body as ApiResponse;
+    const resp = body as ApiResponse;
+    return {
+      ...resp,
+      candles: resp.candles.map((c) => ({
+        ...c,
+        time: ((c.time as number) + KST_OFFSET_SEC) as UTCTimestamp,
+      })),
+      volumes: resp.volumes.map((v) => ({
+        ...v,
+        time: ((v.time as number) + KST_OFFSET_SEC) as UTCTimestamp,
+      })),
+    };
   }
 
   function mergeCandles(
