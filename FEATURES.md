@@ -2,7 +2,7 @@
 
 > 이 문서는 프로젝트에 실제로 구현되어 동작하는 기능만 기록합니다.
 > 새 기능 완료 시 즉시 추가. 기획/미구현 항목은 넣지 않습니다.
-> 마지막 업데이트: 2026-04-24 (배포 스택 — Dockerfile + Caddy + docker-compose)
+> 마지막 업데이트: 2026-04-24 (stockchart.jeons.kr 프로덕션 배포 완료 — 호스트 nginx + Let's Encrypt)
 
 ---
 
@@ -98,6 +98,15 @@
 ---
 
 ## 변경 로그
+
+### 2026-04-24 — stockchart.jeons.kr 프로덕션 배포 완료
+- `infra/docker-compose.yml` 최상단 `name: trading-infra` 고정 — 디렉터리 달라도 기존 `~/trading-infra/`의 tv1-pg/tv1-redis 볼륨·네트워크 재사용
+- `sudo docker compose up -d --no-deps --build tv1-web` — 의존 서비스 재생성 없이 tv1-web만 추가 (tv1-pg/tv1-redis 컨테이너 ID·uptime 유지 확인)
+- `src/lib/db/pool.ts` Proxy 기반 lazy-init — `next build`의 page-data-collection이 DATABASE_URL 없이도 통과 (빌드 실패 근본 수정)
+- `public/.gitkeep` 추가 — Dockerfile 런타임 stage의 `COPY /app/public` 실패 해결
+- VM1에 `trading-infra-tv1-web:latest` ARM64 이미지 빌드·기동, `127.0.0.1:3000` 리스닝 ("Ready in 184ms")
+- nginx bootstrap HTTP → certbot webroot 발급 (`/etc/letsencrypt/live/stockchart.jeons.kr/`, 만료 2026-07-23, 자동 갱신) → `infra/nginx-stockchart.conf` full HTTPS 교체
+- `https://stockchart.jeons.kr/` 공개 서비스 개시 — HSTS + 보안헤더 적용, `/api/candles?symbol=005930&interval=5m` JSON 정상 응답
 
 ### 2026-04-24 — stockchart.jeons.kr 배포 스택 (호스트 nginx 경유)
 - `Dockerfile` + `.dockerignore` — Next.js standalone multi-stage 빌드 (ARM64)
