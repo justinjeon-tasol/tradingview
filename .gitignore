@@ -49,6 +49,7 @@ Thumbs.db
 # IDE / local tool settings
 .vscode/
 .idea/
+.claude/
 .claude/settings.local.json
 
 # Temporary screenshots
