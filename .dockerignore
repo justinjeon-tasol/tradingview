@@ -1,0 +1,51 @@
+# Build output
+.next
+.next/
+
+# Dependencies
+node_modules
+npm-debug.log*
+yarn-debug.log*
+
+# Env & secrets
+.env
+.env.*
+!.env.production.example
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+.claude
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local data (KIS tokens, seed files already shipped, etc.)
+.kis-token-cache.json
+infra/.env
+dev.log
+*.log
+
+# Monorepo / services that shouldn't be in the web image
+services/
+data/kis/*.mst
+data/kis/*.mst.zip
+
+# Project docs not needed at runtime
+*.md
+!FEATURES.md
+image*.png
+*.xlsx
+ORACLE_VM_SETUP.md
+DATA_COLLECTION_ROADMAP_*.md
+
+# CI / temp
+coverage/
+.cache/

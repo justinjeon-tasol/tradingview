@@ -1,10 +1,20 @@
 import Chart from "@/components/Chart";
+import SymbolList from "@/components/SymbolList";
+import SymbolSearch from "@/components/SymbolSearch";
+import { sql } from "@/lib/db/pool";
 import { isValidTimeframe } from "@/lib/timeframes";
 
 type SearchParams = Promise<{
   tf?: string;
   symbol?: string;
 }>;
+
+async function resolveName(code: string): Promise<string | null> {
+  const rows = await sql<{ name: string }[]>`
+    SELECT name FROM symbols WHERE code = ${code} LIMIT 1
+  `;
+  return rows[0]?.name ?? null;
+}
 
 export default async function Home({
   searchParams,
@@ -16,28 +26,34 @@ export default async function Home({
     params.tf && isValidTimeframe(params.tf) ? params.tf : "5m";
   const symbol =
     params.symbol && /^\d{6}$/.test(params.symbol) ? params.symbol : "005930";
+  const name = await resolveName(symbol).catch(() => null);
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
-      <header className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {symbol} · {symbol === "005930" ? "삼성전자" : "KRX"}
+    <div className="flex h-screen flex-col">
+      <header className="flex items-center justify-between gap-4 border-b border-border bg-panel/40 px-4 py-3">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <h1 className="text-lg font-semibold tracking-tight">
+            {symbol} <span className="text-muted">·</span>{" "}
+            <span className="text-white">{name ?? "—"}</span>
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            KRX · KIS OpenAPI · 1분봉 저장 · 임의 간격 집계
-          </p>
+          <span className="text-xs text-muted">
+            KRX · KIS OpenAPI · 1분봉 저장 / 집계 제공
+          </span>
         </div>
-        <div className="text-xs text-muted">
-          실전 계좌 · 분 단위 집계 · 최대 7일 히스토리
+        <div className="w-80">
+          <SymbolSearch />
         </div>
       </header>
 
-      <Chart symbol={symbol} interval={interval} />
+      <main className="grid min-h-0 flex-1 grid-cols-[280px_1fr]">
+        <aside className="min-h-0 border-r border-border bg-panel/20">
+          <SymbolList currentSymbol={symbol} />
+        </aside>
 
-      <footer className="mt-6 text-xs text-muted">
-        다음 단계: 일봉·월봉 데이터, 이동평균·RSI 인디케이터, 실시간 체결 스트림.
-      </footer>
-    </main>
+        <section className="min-h-0 overflow-hidden p-4">
+          <Chart symbol={symbol} interval={interval} />
+        </section>
+      </main>
+    </div>
   );
 }

@@ -15,13 +15,11 @@ import {
   type LogicalRange,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { TIMEFRAMES, type TimeframeValue } from "@/lib/timeframes";
+import type { TimeframeValue } from "@/lib/timeframes";
+import TimeframeToggle from "./TimeframeToggle";
 
 const priceFmt = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 });
 const formatPrice = (p: number) => priceFmt.format(Math.round(p));
-
-const INTRADAY_TFS = TIMEFRAMES.filter((t) => t.kind === "intraday");
-const DAILY_TFS = TIMEFRAMES.filter((t) => t.kind === "daily");
 
 type ApiResponse = {
   symbol: string;
@@ -287,34 +285,12 @@ export default function Chart({
 
   return (
     <div className="relative">
-      <div className="mb-2 flex items-center gap-2 text-xs">
-        <label htmlFor="tf-select" className="text-muted">
-          타임프레임
-        </label>
-        <select
-          id="tf-select"
-          value={interval}
-          onChange={(e) =>
-            handleTimeframeClick(e.target.value as TimeframeValue)
-          }
-          className="rounded border border-border bg-panel px-3 py-1.5 text-white focus:border-[#2962FF] focus:outline-none focus:ring-1 focus:ring-[#2962FF]"
-        >
-          <optgroup label="분봉">
-            {INTRADAY_TFS.map((tf) => (
-              <option key={tf.value} value={tf.value}>
-                {tf.label}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="일봉 이상">
-            {DAILY_TFS.map((tf) => (
-              <option key={tf.value} value={tf.value}>
-                {tf.label}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-      </div>
+      <TimeframeToggle
+        value={interval as TimeframeValue}
+        onChange={handleTimeframeClick}
+        className="mb-2"
+      />
+
       <div
         ref={containerRef}
         className="h-[70vh] w-full rounded-lg border border-border bg-panel"

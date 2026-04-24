@@ -2,9 +2,19 @@
 
 > 이 문서는 프로젝트에 실제로 구현되어 동작하는 기능만 기록합니다.
 > 새 기능 완료 시 즉시 추가. 기획/미구현 항목은 넣지 않습니다.
-> 마지막 업데이트: 2026-04-24 (Supabase trades 폴러 실동작화)
+> 마지막 업데이트: 2026-04-24 (배포 스택 — Dockerfile + Caddy + docker-compose)
 
 ---
+
+## 앱 레이아웃
+
+- **2-col 메인 레이아웃** — 상단 헤더(현재 종목명 + 검색창), 좌측 종목 리스트(280px), 우측 차트. 전체 화면 높이. (`src/app/page.tsx`)
+- **종목 검색 (SymbolSearch)** — debounce 300ms 자동완성, ↑↓/Enter 키보드 네비게이션, ESC로 닫기, 외부 클릭 시 닫힘. 선택 시 URL `?symbol=` 동기화. (`src/components/SymbolSearch.tsx`)
+- **종목 리스트 (SymbolList)** — S/A/B/ALL 티어 탭 + 티어별 카운트, 섹터 그룹핑 토글(한글 섹터명 헤더 + 종목 수 + collapse/expand), 현재 종목 하이라이트, 클릭 시 URL 동기화. (`src/components/SymbolList.tsx`)
+- **섹터 한글 매핑** — KOSPI200 단일문자 코드(1~B) → 한글 이름(건설/중공업/철강/화학/IT/금융/필수소비재/경기소비재/산업재/헬스케어/커뮤니케이션). 기존 한글 섹터명은 그대로 유지. (`src/lib/sectors.ts`)
+- **TierBadge** — S(빨강)/A(초록)/B(파랑) 색상 구분 뱃지. (`src/components/TierBadge.tsx`)
+- **TimeframeToggle** — Chart.tsx에서 추출된 재사용 가능 드롭다운. (`src/components/TimeframeToggle.tsx`)
+- **useSymbols hooks** — `useSymbolSearch` (debounced autocomplete), `useSymbolList` (필터 + 집계). (`src/hooks/useSymbols.ts`)
 
 ## 차트 UI
 
@@ -34,6 +44,8 @@
 
 ## API — Next.js Route Handler
 
+- **`GET /api/symbols/search?q=&limit=`** — 종목 자동완성. 6자리 숫자 = code 매칭, 그 외 = name ILIKE + code prefix. 정확→prefix→contains 우선순위. 응답에 tier 포함(universe 편입 여부). (`src/app/api/symbols/search/route.ts`)
+- **`GET /api/symbols/list?tier=&sector=&limit=`** — 유니버스 리스트 + `byTier`/`bySector` 집계. tier S/A/B/ALL, sector 부분 일치. (`src/app/api/symbols/list/route.ts`)
 - **`GET /api/candles`** — DB-first 조회, 캐시 미스 시 KIS 호출 → upsert → 반환. interval 타입에 따라 인트라데이/일봉 분기. (`src/app/api/candles/route.ts`)
   - `?symbol=` (6자리 KRX 코드, 기본 `005930`)
   - `?interval=` (인트라데이: `1m/5m/15m/30m/60m` · 일봉: `1d/10d/1mo`, 기본 `5m`)
@@ -41,6 +53,14 @@
   - 인트라데이: 최대 7일 히스토리, 장중 10분 이상 stale 시 자동 재패치
   - 일봉: 최근 1년치 로드, 7일 이상 stale 시 재패치
   - 응답에 `kind: "intraday" | "daily"` 포함
+
+## 데이터 수집 (Phase 1)
+
+- **일간 수급 (FHPTJ04160001)** — 종목별 투자자매매동향(일별). 외국인/기관계/개인 순매수 + 기관 세부 8종(증권/신탁/사모/은행/보험/종금/기금/기타) + 외국인 등록/비등록 분리. (`src/lib/kis/investor-flows.ts`)
+- **수집 테이블** — `flows_daily (date, code, OHLCV 요약 + 투자자 20+ 필드)` TimescaleDB 하이퍼테이블 30일 청크. 거래대금(백만원)을 원 단위로 정규화(×1_000_000). (`infra/migrations/004_flows_daily.sql`)
+- **수집 감사로그** — `flows_daily_log` 매 실행당 coverage/실패종목/duration/triggered_by 기록.
+- **CLI 수집기** — `npm run flows:collect`: 오늘치 수집. `--date=YYYYMMDD` 단일일, `--since=/--until=` 범위 백필(주말 자동 스킵), `--symbol=005930` 단일 종목, `--dry-run` DB 쓰기 없이 확인. universe(S/A/B·ACTIVE·non-ETF) 순회, 150ms throttle. (`scripts/collect-flows-daily.ts`)
+- **Cron Route Handler** — `POST /api/cron/flows-daily?date=&dry=`: `CRON_SHARED_SECRET` Bearer 인증. VM1 crontab에서 `30 16 * * 1-5` 호출. 응답에 coverage/duration 포함. (`src/app/api/cron/flows-daily/route.ts`)
 
 ## 유니버스 관리
 
@@ -54,6 +74,15 @@
 - **승격·강등 훅** — `src/lib/universe/hooks.ts`: `onSignalBuy` (S 임시 승격, 1h), `onTradeExecuted` (S 고정), `onPositionClosed` (청산 마커), `demoteStaleSTier` (cron용 자동 강등). universe_history에 감사 이력 기록.
 - **훅 테스트 CLI** — `npm run hook:test -- --event signal-buy --code 005930` 등으로 수동 트리거 가능.
 - **Trades poller (실동작)** — `scripts/trades-poll.ts`: Supabase `trades`(BUY) + `positions`(CLOSED) 30초 폴링. `signal_source='KIS_SYNC'` 아티팩트 제외 필터. 훅 자동 호출. 커서는 TimescaleDB `poll_cursors` 테이블에 저장 (다중 인스턴스 안전). `--once` / `--dry-run` / `--since` / `--interval` 옵션 지원.
+
+## 배포 스택
+
+- **Next.js standalone Dockerfile** — multi-stage build(deps/build/runtime), node:20-alpine 베이스, ARM64/AMD64 양쪽 지원, non-root nextjs 유저. (`Dockerfile`, `.dockerignore`)
+- **호스트 nginx 재사용** — VM1에 이미 trading.jeons.kr 서빙 중인 nginx(+ certbot)가 80/443 점유. Caddy 추가 대신 기존 nginx에 stockchart server block만 추가해 단일 엣지 유지. (`infra/nginx-stockchart.conf`)
+- **nginx server block** — HTTP→HTTPS 리다이렉트 + ACME webroot + HTTPS(HSTS, X-Frame-Options DENY), `/trade/*`는 Tailscale CGNAT(100.64.0.0/10)만 허용, `/api/cron/*`은 app Bearer 인증 + 360s 타임아웃. (`infra/nginx-stockchart.conf`)
+- **docker-compose**에 `tv1-web` 서비스 추가 — tv1-pg/tv1-redis와 동일 compose 스택, 외부 노출 `127.0.0.1:3000`만(호스트 nginx가 접근), mem_limit 768m. (`infra/docker-compose.yml`)
+- **배포 런북** — DNS A 레코드(dnszi), OCI Security List 80/443, iptables, VM1 git clone, 환경변수 파일, 업데이트 플로우. (`infra/DEPLOY.md`)
+- **`.env.example`**에 tv1-web 런타임 env 추가 (KIS 키, CRON_SHARED_SECRET).
 
 ## 인프라 & 보안
 
@@ -69,6 +98,40 @@
 ---
 
 ## 변경 로그
+
+### 2026-04-24 — stockchart.jeons.kr 배포 스택 (호스트 nginx 경유)
+- `Dockerfile` + `.dockerignore` — Next.js standalone multi-stage 빌드 (ARM64)
+- `next.config.ts`에 `output: "standalone"` 추가
+- `infra/nginx-stockchart.conf` — 기존 nginx(trading.jeons.kr 서빙 중)에 추가할 server block. HSTS/보안헤더/ACME 경로/Tailscale 가드.
+- `infra/docker-compose.yml`에 tv1-web 서비스 추가, `127.0.0.1:3000` 바인딩 (호스트 nginx 접근용)
+- `infra/.env.example`에 web 런타임 env 섹션 (KIS 키, CRON_SHARED_SECRET)
+- `infra/DEPLOY.md` — git push → VM1 pull → tv1-web compose up → nginx bootstrap 설정 → certbot webroot 발급 → full config 교체 → 검증
+- (이전에 작성했던 Caddy 경로는 폐기 — 호스트 nginx와 80/443 충돌 때문)
+
+### 2026-04-24 — 섹터 한글 매핑
+- `src/lib/sectors.ts` — KOSPI200 섹터 코드(1~B) → 한글 이름 매핑. DB 샘플 11개 코드로 실제 종목명 기반 검증
+- `SymbolList`의 섹터 그룹 헤더에 적용. 관례 순서(IT→금융→헬스케어…)로 정렬
+- 수동 시드의 기존 한글 섹터명(반도체/항공/엔터 등)은 매핑 없이 그대로 표시
+
+### 2026-04-24 — UI MVP 구현 완료
+- `/api/symbols/search` + `/api/symbols/list` 2개 Route Handler
+- `SymbolSearch`(자동완성+키보드 네비) + `SymbolList`(티어 탭+섹터 그룹핑) + `TierBadge`(S/A/B 색상) + `TimeframeToggle`(Chart에서 추출)
+- `useSymbolSearch` / `useSymbolList` hook 분리 (debounce, abort, 필터)
+- `page.tsx`를 2-col 레이아웃으로 재구성 (상단 헤더+검색, 좌: 리스트, 우: 차트)
+- 221종목 유니버스를 UI로 자유롭게 탐색 가능한 상태
+
+### 2026-04-24 — UI MVP 백로그 확정
+- `docs/UI_BACKLOG.md` — 다음 세션 1순위. 종목 검색(SymbolSearch) + 티어 탭 리스트(SymbolList) + 2-col 레이아웃
+- 예상 소요 하루. API 2개(symbols/search, symbols/list) + 컴포넌트 4개 + hooks 2개
+- 메모리에 우선순위 고정 (다음 세션 자동 승계)
+
+### 2026-04-24 — Phase 1 W1: 일간 수급 수집 구축
+- `infra/migrations/004_flows_daily.sql` — flows_daily 하이퍼테이블 + flows_daily_log 감사 로그
+- `src/lib/kis/investor-flows.ts` — FHPTJ04160001 fetcher. 백만원 → 원 단위 변환, tr_cont 페이징
+- `scripts/collect-flows-daily.ts` — universe 순회 수집기, 백필/dry-run/단일종목 지원
+- `src/app/api/cron/flows-daily/route.ts` — cron 전용 Route Handler, Bearer 인증
+- `.env.local`에 `CRON_SHARED_SECRET` 자리
+- `npm run flows:collect` 스크립트
 
 ### 2026-04-24 — Supabase trades 폴러 실동작화
 - `scripts/trades-poll.ts` 실구현 — trades(BUY, `signal_source != 'KIS_SYNC'` 필터) + positions(CLOSED) 병렬 폴링

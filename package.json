@@ -14,7 +14,8 @@
     "universe:fetch:kosdaq150": "tsx --env-file=.env.local scripts/fetch-kospi200-kis.ts --alias kodex_kq150",
     "universe:tier": "tsx --env-file=.env.local scripts/universe-tier.ts",
     "hook:test": "tsx --env-file=.env.local scripts/hook-test.ts",
-    "trades:poll": "tsx --env-file=.env.local scripts/trades-poll.ts"
+    "trades:poll": "tsx --env-file=.env.local scripts/trades-poll.ts",
+    "flows:collect": "tsx --env-file=.env.local scripts/collect-flows-daily.ts"
   },
   "dependencies": {
     "lightweight-charts": "^5.0.7",
