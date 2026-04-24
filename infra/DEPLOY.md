@@ -55,14 +55,18 @@ vim infra/.env
 
 ## 3. tv1-web 컨테이너 빌드·기동
 
+compose.yml 최상단에 `name: trading-infra` 선언돼 있어 ~/trading-infra (기존 tv1-pg·tv1-redis 가동 중 디렉터리)에서 띄운 것과 **동일 프로젝트로 인식**되어 볼륨·네트워크 재사용. `--no-deps` 플래그로 의존 서비스(tv1-pg/tv1-redis) 재기동 방지.
+
 ```bash
 cd ~/trading-app/infra
-sudo docker compose up -d --build tv1-web
+sudo docker compose up -d --no-deps --build tv1-web
 
-# 상태 확인
+# 상태 확인 — trading-infra 프로젝트 하에 tv1-pg, tv1-redis, tv1-web 3개 전부 보여야 정상
 sudo docker compose ps
 sudo docker compose logs --tail 50 tv1-web
 ```
+
+> 만약 "containers already exist with different config" 같은 에러가 나면 기존 tv1-pg/tv1-redis를 건드리려 하는 것. `--no-deps`를 반드시 포함했는지 확인.
 
 초기 빌드 3~7분 소요 (ARM64 Node 20 alpine). 완료 후 로컬 접속 검증:
 ```bash

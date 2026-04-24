@@ -1,3 +1,8 @@
+# 프로젝트 이름을 고정 — 디렉터리명과 관계없이 동일 스택으로 인식된다.
+# VM1의 기존 ~/trading-infra/ 에서 띄운 tv1-pg / tv1-redis 볼륨을 그대로 재사용.
+# 이 선언 없이 ~/trading-app/infra/ 에서 돌리면 project=infra로 잡혀 볼륨 신규 생성 → 데이터 단절.
+name: trading-infra
+
 services:
   timescaledb:
     image: timescale/timescaledb:latest-pg16
