@@ -28,7 +28,9 @@ export const runtime = "nodejs";
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const INITIAL_DAYS_BACK = 3;
 const MAX_HISTORY_DAYS = 7;
-const TODAY_STALE_MS = 10 * 60 * 1000;
+// 클라이언트가 15s 폴링 → 서버는 60s 지나면 KIS 재호출해 최신 1분봉 수급.
+// 1m 데이터의 의미 단위 자체가 분 단위라 이 밑으로 내려도 KIS 호출만 늘고 체감 차이 없음.
+const TODAY_STALE_MS = 60 * 1000;
 const DAILY_INITIAL_RANGE_DAYS = 365;
 const DAILY_STALE_DAYS = 7;
 
