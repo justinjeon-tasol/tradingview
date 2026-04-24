@@ -283,6 +283,54 @@ export default function Chart({
     return () => controller.abort();
   }, [symbol, interval]);
 
+  useEffect(() => {
+    if (status !== "ready") return;
+
+    const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+    const POLL_MS = 15_000;
+
+    const inMarketHours = () => {
+      const kst = new Date(Date.now() + KST_OFFSET_MS);
+      const day = kst.getUTCDay();
+      if (day === 0 || day === 6) return false;
+      const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+      return mins >= 9 * 60 && mins <= 15 * 60 + 35;
+    };
+
+    const tick = async () => {
+      if (!inMarketHours()) return;
+      if (loadingOlderRef.current) return;
+      try {
+        const resp = await fetchBars({ symbol, interval });
+        if ("error" in resp || resp.candles.length === 0) return;
+
+        const existing = candleDataRef.current;
+        const lastExistingTime =
+          existing.length > 0 ? (existing[existing.length - 1]!.time as number) : -1;
+
+        const newCandles = resp.candles.filter(
+          (b) => (b.time as number) >= lastExistingTime,
+        );
+        const newVolumes = resp.volumes.filter(
+          (v) => (v.time as number) >= lastExistingTime,
+        );
+        if (newCandles.length === 0) return;
+
+        for (const bar of newCandles) candleRef.current?.update(bar);
+        for (const v of newVolumes) volumeRef.current?.update(v);
+
+        candleDataRef.current = mergeCandles(existing, newCandles);
+        volumeDataRef.current = mergeVolumes(volumeDataRef.current, newVolumes);
+        setMeta({ count: candleDataRef.current.length });
+      } catch {
+        // 폴링 실패는 조용히 무시 — 다음 tick에서 재시도
+      }
+    };
+
+    const id = setInterval(tick, POLL_MS);
+    return () => clearInterval(id);
+  }, [status, symbol, interval]);
+
   return (
     <div className="relative">
       <TimeframeToggle

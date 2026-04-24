@@ -118,6 +118,7 @@ export async function fetchOneMinuteBars(
 ): Promise<Bar[]> {
   const maxBars = options.maxBars ?? 180;
   const collected = new Map<number, Bar>();
+  const nowSec = Math.floor(Date.now() / 1000);
 
   const nowKst = new Date(Date.now() + KST_OFFSET_MS);
   const nowHHMM =
@@ -145,21 +146,31 @@ export async function fetchOneMinuteBars(
     const chunk = await fetchMinuteChunk({ symbol, hourHHMMSS: cursor });
     if (chunk.length === 0) break;
 
-    for (const bar of chunk) collected.set(bar.time, bar);
+    // KIS의 inquire-time-itemchartprice는 장 시작 전이나 미래 시각 cursor에 대해
+    // 직전 거래일 데이터를 오늘 날짜로 리라벨해 돌려준다. 실제 시각 이후 바는 드롭.
+    const legitimate = chunk.filter((b) => b.time <= nowSec);
+    if (legitimate.length === 0) break;
 
-    const earliest = chunk[0];
+    for (const bar of legitimate) collected.set(bar.time, bar);
+
+    const earliest = legitimate[0];
     const earliestDate = new Date(earliest.time * 1000 + KST_OFFSET_MS);
+    const earliestMins =
+      earliestDate.getUTCHours() * 60 + earliestDate.getUTCMinutes();
+
+    // 09:00 (장 시작) 또는 그 이전이면 중단 — 더 요청하면 KIS가 전일 잔재 라벨 오염됨.
+    if (earliestMins <= 9 * 60) break;
+
     earliestDate.setUTCMinutes(earliestDate.getUTCMinutes() - 1);
-
-    if (earliestDate.getUTCHours() < 9) break;
-
     cursor =
       String(earliestDate.getUTCHours()).padStart(2, "0") +
       String(earliestDate.getUTCMinutes()).padStart(2, "0") +
       String(earliestDate.getUTCSeconds()).padStart(2, "0");
   }
 
-  const bars = Array.from(collected.values()).sort((a, b) => a.time - b.time);
+  const bars = Array.from(collected.values())
+    .filter((b) => b.time <= nowSec)
+    .sort((a, b) => a.time - b.time);
   return bars.slice(-maxBars);
 }
 
